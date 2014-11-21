@@ -1,0 +1,83 @@
+---
+output: html_document
+keep_md : true
+---
+
+## Analyis on Weight Lifting Exercises done on HAR devices
+
+### Executive Summary
+The aim of this report is to use the data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and predict the manner in which they did the exercise. More information is available from the website here (http://groupware.les.inf.puc-rio.br/har)
+
+### Data Processing and Analysis
+The training data for this project are available here:
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv).   
+The test data are available here:
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+#### Load the required R packages
+
+```{r message=FALSE}
+library(caret)
+library(randomForest)
+## Load the training and test data sets
+training_ds <- read.csv("pml-training.csv", header = TRUE, na.strings = c("NA", ""))
+test_ds <- read.csv("pml-testing.csv", header = TRUE, na.strings = c("NA", ""))
+dim(training_ds);dim(test_ds);
+```
+#### Handling Missing Values
+```{r message=FALSE}
+training_ds <- training_ds[, (colSums(is.na(training_ds)) == 0)]
+test_ds <- test_ds[, (colSums(is.na(test_ds)) == 0)]
+dim(training_ds);dim(test_ds);
+```
+
+#### Preparing for Training Set and Test Sets for cross validation
+```{r message=FALSE}
+inTrain = createDataPartition(y = training_ds$classe, p = 0.7, list = FALSE)
+training = training_ds[inTrain, ]
+cross_validation = training_ds[-inTrain, ]
+dim(training);dim(cross_validation);
+
+```
+#### Remove some irrelvant fields to the prediction model in Training Set and Test Sets
+```{r message=FALSE}
+fields_to_delete <- grepl("X|user_name|raw_timestamp_part_1|raw_timestamp_part_2|cvtd_timestamp|new_window|num_window", colnames(training))
+training <- training[, !fields_to_delete]
+cross_validation <- cross_validation[, !fields_to_delete]
+test_ds_final <- test_ds[, !fields_to_delete]
+dim(training);dim(cross_validation);dim(test_ds_final)
+```
+
+#### Preprocessing with PCA by leaving the "classe" field
+```{r message=FALSE}
+preProc <- preProcess(training[, -length(training)], method = "pca", thresh = 0.99)
+PCAtrain <- predict(preProc, training[, -length(training)])
+PCAcross_validation <- predict(preProc, cross_validation[, -length(cross_validation)])
+PCATest <- predict(preProc, test_ds_final[, -length(test_ds_final)])
+dim(PCAtrain);dim(PCAcross_validation);dim(PCATest);
+```
+
+#### Train the prediction model with random forest algoritham and do cross validation testing
+```{r message=FALSE}
+ctrl <- trainControl(allowParallel=T,method = "cv", number = 4)
+modelFit <- train(training$classe ~ ., method = "rf", data = PCAtrain,trControl = ctrl , importance = TRUE)
+
+cross_predictions <- predict(modelFit, PCAcross_validation)
+cMatrix <- confusionMatrix(cross_validation$classe, cross_predictions)
+cMatrix$table
+```
+#### The output sample error
+```{r message=FALSE}
+accur <- postResample(cross_validation$classe, cross_predictions)
+model_accuracy <- accur[[1]]
+model_accuracy
+```
+The above model is `r model_accuracy` accurate.
+
+#### Result Preditions with Teset Set
+```{r message=FALSE}
+predictions <- predict(modelFit, PCATest)
+
+```
+The prediction results from the test sets are as `r predictions`
+
